@@ -79,6 +79,8 @@ INPUT_ROWS: list[tuple] = [
     ("City Development / PID Fee", "CITY_FEE", "city_fee", FMT_PCT, "% of par, if the city charges one"),
     ("Fixed Administration Fee Per Lot", "ADMIN_FEE_FIXED_LOT", "admin_fee_fixed_lot", FMT_DOLLAR2,
      "$/lot/yr collected in the annual installment"),
+    ("Fixed Administration Cost Per Series", "ADMIN_FEE_FIXED_SERIES", "admin_fee_fixed_series", FMT_DOLLAR,
+     "$/yr per bond series (city / PID administrator), spread across its lots"),
     ("Administrative Expense Escalator", "ADMIN_ESCALATOR", "admin_escalator", FMT_PCT, "Annual growth"),
     ("Delinquency & Prepayment Reserve Deposit", "DP_RESERVE_DEPOSIT", "dp_reserve_deposit", FMT_PCT,
      "% of par at closing; topped up from additional interest"),
@@ -113,6 +115,13 @@ INPUT_ROWS: list[tuple] = [
     ("Months from Lot Delivery to First Closing", "MONTHS_LOT_TO_CLOSE", "months_lot_to_close", FMT_NUM, None),
     ("Assessed Value Lag (years)", "AV_LAG_YEARS", "av_lag_years", FMT_NUM, "Closing year to tax roll year"),
     ("Projection Horizon (years)", "PROJECTION_YEARS", "projection_years", FMT_NUM, None),
+
+    ("Homeowner Cost Comparison (PID vs. No PID)", None, None, None, None),
+    ("Homeowner Mortgage Rate", "MORTGAGE_RATE", "mortgage_rate", FMT_PCT, None),
+    ("Mortgage Term (years)", "MORTGAGE_TERM", "mortgage_term", FMT_NUM, None),
+    ("Mortgage Loan as % of Home Price", "MORTGAGE_LTV", "mortgage_ltv", FMT_PCT, None),
+    ("Home Price as Multiple of Lot Price", "HOME_PRICE_MULTIPLE", "home_price_multiple", "0.00",
+     "Each $1 of lot cost the PID doesn't fund adds this much to the home price"),
 ]
 
 INPUT_FIRST_ROW = 5

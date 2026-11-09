@@ -66,12 +66,17 @@ class LotAssessment:
         } for r in self.schedule])
 
 
-def admin_expense(cfg: ModelConfig, year_no: int) -> float:
-    return cfg.admin_fee_fixed_lot * (1 + cfg.admin_escalator) ** (year_no - 1)
+def admin_expense(cfg: ModelConfig, year_no: int, series_share: float = 0.0) -> float:
+    """Per-lot administrative expense in installment year `year_no`.
+
+    series_share is this lot's share of the fixed per-series cost
+    (ADMIN_FEE_FIXED_SERIES), allocated by gross installment."""
+    base = cfg.admin_fee_fixed_lot + cfg.admin_fee_fixed_series * series_share
+    return base * (1 + cfg.admin_escalator) ** (year_no - 1)
 
 
 def size_lot(cfg: ModelConfig, product: Product, first_bond_year: int,
-             n_years: int, scale: float = 1.0) -> LotAssessment:
+             n_years: int, scale: float = 1.0, series_share: float = 0.0) -> LotAssessment:
     """Size one lot's assessment and build its installment schedule.
 
     scale < 1.0 levies less than the maximum (e.g. when bonds are capped by
@@ -79,7 +84,7 @@ def size_lot(cfg: ModelConfig, product: Product, first_bond_year: int,
     """
     gross = product.avg_selling_price / 100 * cfg.effective_pid_rate
     rs = cfg.sizing_rate
-    net = [max(0.0, gross - admin_expense(cfg, t)) * cfg.tax_collection / cfg.dsc_factor
+    net = [max(0.0, gross - admin_expense(cfg, t, series_share)) * cfg.tax_collection / cfg.dsc_factor
            for t in range(1, n_years + 1)]
     capacity = sum(n / (1 + rs) ** t for t, n in enumerate(net, start=1))
     assessment = capacity * scale
@@ -95,6 +100,6 @@ def size_lot(cfg: ModelConfig, product: Product, first_bond_year: int,
         add_int = bal * cfg.additional_interest
         new_bal = bal - prin
         rows.append(InstallmentRow(t, first_bond_year + t - 1, prin, interest,
-                                   add_int, admin_expense(cfg, t), max(0.0, new_bal)))
+                                   add_int, admin_expense(cfg, t, series_share), max(0.0, new_bal)))
         bal = new_bal
     return LotAssessment(product, gross, assessment, capacity, rows)

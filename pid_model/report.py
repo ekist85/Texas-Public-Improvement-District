@@ -122,7 +122,7 @@ def _summary(ws, cfg: ModelConfig, bm: BondModel, dev: DevelopmentProjection):
     r += 1
     hdrs = ["Effective Tax Rate", "Avg. Gross Annual Assessment", "Avg. Est. Total Assessment Per Lot",
             "Total Par Amount", "Est. Net Proceeds to Developer", "Total Improvement Costs",
-            "Shortfall / (Excess)"]
+            "Net Developer Investment"]
     ws.row_dimensions[r].height = 40
     for i, h in enumerate(hdrs):
         _hdr(ws, r, 2 + i, h)
@@ -574,13 +574,126 @@ def _tests(ws, cfg: ModelConfig, bm: BondModel):
             ).font = _NOTE_FONT
 
 
+# ── 9. Homeowner Cost Comparison ────────────────────────────────────────────
+def _homeowner(ws, cfg: ModelConfig, bm: BondModel):
+    prods = [p for p in cfg.products
+             if any(p.name in s.lot_assessments for s in bm.series)]
+    LAST = 3 + len(prods)
+    t1, t2 = _titles(cfg)
+    _title_block(ws, t1, t2, "Homeowner Cost Comparison — PID vs. No PID", LAST)
+    ws.column_dimensions["A"].width = 52
+    ws.column_dimensions["B"].width = 18
+    for i in range(len(prods)):
+        ws.column_dimensions[CL(3 + i)].width = 15
+
+    par = bm.total_par
+    netpct = bm.total_project_fund / par if par else 0.0
+    # Weighted assessment and first installment per product across series
+    stats = {}
+    for p in prods:
+        lots = sum(s.phase.lots.get(p.name, 0) for s in bm.series if p.name in s.lot_assessments)
+        a = sum(s.lot_assessments[p.name].assessment * s.phase.lots[p.name]
+                for s in bm.series if p.name in s.lot_assessments)
+        inst = sum(s.lot_assessments[p.name].schedule[0].installment * s.phase.lots[p.name]
+                   for s in bm.series if p.name in s.lot_assessments)
+        stats[p.name] = (a / lots, inst / lots)
+
+    r = 5
+    ws.row_dimensions[r].height = 30
+    _hdr(ws, r, 1, "Item")
+    _hdr(ws, r, 2, "Reference")
+    for i, p in enumerate(prods):
+        _hdr(ws, r, 3 + i, p.name)
+    # (label, ref, kind, per-product value fn or formula template using {c}=column letter)
+    # Rows referenced by key so formulas stay readable
+    spec = [
+        ("Assumptions", None, None, None),
+        ("PID Term (years)", "Years", "val", lambda p: cfg.final_mat_yrs, _FMT_NUM),
+        ("PID Equivalent Tax Rate", "A", "val", lambda p: cfg.effective_pid_rate, _FMT_RATE),
+        ("Ad Valorem Tax Rate before PID (City, County, ISD, etc.)", "B", "val",
+         lambda p: cfg.overlapping_rate, _FMT_RATE),
+        ("Homeowner Mortgage Rate", "Rate", "val", lambda p: cfg.mortgage_rate, _FMT_PCT),
+        ("Mortgage Term (years)", "Term", "val", lambda p: cfg.mortgage_term, _FMT_NUM),
+        ("Mortgage Loan as % of Home Price", "C", "val", lambda p: cfg.mortgage_ltv, _FMT_PCT),
+        ("Net Proceeds as % of Gross PID Bonds", "D-1", "val", lambda p: netpct, _FMT_PCT),
+        ("Assessment Per Lot", "Assess", "val", lambda p: stats[p.name][0], _FMT_DOLLAR),
+        ("PID-Financed Infrastructure per Lot", "D = Assess x D-1", "f", "={c}{Assess}*{c}{D-1}", _FMT_DOLLAR),
+        ("Home Price as Multiple of Lot Cost", "E", "val", lambda p: cfg.home_price_multiple, "0.00"),
+        ("PID Scenario", None, None, None),
+        ("Average Home Price", "F", "val", lambda p: p.avg_selling_price, _FMT_DOLLAR),
+        ("Lot Price assuming PID", "G = F / E", "f", "={c}{F}/{c}{E}", _FMT_DOLLAR),
+        ("Mortgage with PID", "H = C x F", "f", "={c}{C}*{c}{F}", _FMT_DOLLAR),
+        ("Down Payment with PID", "I = F - H", "f", "={c}{F}-{c}{H}", _FMT_DOLLAR),
+        ("Monthly Mortgage Payment", "J", "f", "=PMT({c}{Rate}/12,{c}{Term}*12,-{c}{H})", _FMT_DOLLAR),
+        ("Annual Mortgage Payment", "M = 12 x J", "f", "=12*{c}{J}", _FMT_DOLLAR),
+        ("Annual Ad Valorem Taxes", "N = F / 100 x B", "f", "={c}{F}/100*{c}{B}", _FMT_DOLLAR),
+        ("Annual PID Installment (first year)", "O", "val", lambda p: stats[p.name][1], _FMT_DOLLAR),
+        ("Total Annual Homeowner Payment with PID", "P = M + N + O", "f", "={c}{M}+{c}{N}+{c}{O}", _FMT_DOLLAR),
+        ("No PID Scenario", None, None, None),
+        ("Lot Price assuming No PID", "Q = G + D", "f", "={c}{G}+{c}{D}", _FMT_DOLLAR),
+        ("Incremental Home Price", "R = D x E", "f", "={c}{D}*{c}{E}", _FMT_DOLLAR),
+        ("Home Price without PID", "S = F + R", "f", "={c}{F}+{c}{R}", _FMT_DOLLAR),
+        ("Mortgage without PID", "T = C x S", "f", "={c}{C}*{c}{S}", _FMT_DOLLAR),
+        ("Down Payment without PID", "U = S - T", "f", "={c}{S}-{c}{T}", _FMT_DOLLAR),
+        ("Monthly Mortgage Payment without PID", "V", "f", "=PMT({c}{Rate}/12,{c}{Term}*12,-{c}{T})",
+         _FMT_DOLLAR),
+        ("Annual Mortgage Payment", "W = 12 x V", "f", "=12*{c}{V}", _FMT_DOLLAR),
+        ("Annual Ad Valorem Taxes", "X = S / 100 x B", "f", "={c}{S}/100*{c}{B}", _FMT_DOLLAR),
+        ("Total Annual Homeowner Payment without PID", "Z = W + X", "f", "={c}{W}+{c}{X}", _FMT_DOLLAR),
+        ("Summary", None, None, None),
+        ("Annual Savings to Homeowner with PID", "AA = Z - P", "f", "={c}{Z}-{c}{P}", _FMT_DOLLAR),
+        ("Down Payment Savings with PID", "BB = U - I", "f", "={c}{U}-{c}{I}", _FMT_DOLLAR),
+        ("Lower Home Price with PID", "DD = R", "f", "={c}{R}", _FMT_DOLLAR),
+        ("Total Savings over PID Term", "CC = Years x AA + BB", "f", "={c}{Years}*{c}{AA}+{c}{BB}",
+         _FMT_DOLLAR),
+    ]
+    rows: dict[str, int] = {}
+    i = 0
+    for item in spec:
+        r += 1
+        label, ref = item[0], item[1]
+        if ref is None:
+            _section(ws, r, label, 1, LAST - 1 if LAST > 3 else LAST)
+            for col in range(1, LAST):
+                ws.cell(row=r, column=col).fill = _SUBHDR_FILL
+            continue
+        key = ref.split(" =")[0].split(" ")[0]
+        rows[key] = r
+        kind, src, fmt = item[2], item[3], item[4]
+        summary = key in ("P", "Z", "AA", "BB", "CC", "DD")
+        fill = _TOTAL_FILL if summary else _band(i)
+        font = _TOTAL_FONT if summary else _BODY_FONT
+        i += 1
+        _cell(ws, r, 1, label, fill=fill, font=font, align=_LEFT)
+        _cell(ws, r, 2, ref, fill=fill, font=_NOTE_FONT, align=_CENTER)
+        for j, p in enumerate(prods):
+            col = 3 + j
+            if kind == "val":
+                v = src(p)
+            else:
+                v = src
+                for k in sorted(rows, key=len, reverse=True):
+                    v = v.replace("{c}{" + k + "}", f"{CL(col)}{rows[k]}")
+            _cell(ws, r, col, v, fmt, fill, font)
+    r += 2
+    for t in [
+        "The No PID scenario assumes the developer passes the infrastructure the PID would have financed "
+        "into the lot price, and the home price rises by the home-price-to-lot-cost multiple.",
+        "It does not capture the effect on marketability of reducing amenities and improvements without "
+        "PID funding.",
+    ]:
+        ws.cell(row=r, column=1, value=t).font = _NOTE_FONT
+        r += 1
+    ws.freeze_panes = "C6"
+
+
 # ── Public entry point ───────────────────────────────────────────────────────
 def build_excel_report(cfg: ModelConfig, dev: DevelopmentProjection, bm: BondModel,
                        output_path: str) -> str:
     wb = openpyxl.Workbook()
     sheets = ["Summary", "Sources and Uses", "Bond Sizing Analysis", "Debt Service",
               "Assessment Roll", "Annual Installments", "Project and PID Rev Analysis",
-              "Tax Rate and VTL Tests"]
+              "Tax Rate and VTL Tests", "Homeowner Cost Comparison"]
     ws_map = {}
     for i, name in enumerate(sheets):
         ws_map[name] = wb.active if i == 0 else wb.create_sheet(name)
@@ -594,6 +707,7 @@ def build_excel_report(cfg: ModelConfig, dev: DevelopmentProjection, bm: BondMod
     _installments(ws_map["Annual Installments"], cfg, bm)
     _project(ws_map["Project and PID Rev Analysis"], cfg, dev)
     _tests(ws_map["Tax Rate and VTL Tests"], cfg, bm)
+    _homeowner(ws_map["Homeowner Cost Comparison"], cfg, bm)
     for ws in wb.worksheets:
         ws.page_setup.orientation = "landscape"
         ws.page_setup.fitToWidth = 1

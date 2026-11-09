@@ -77,6 +77,7 @@ class ModelConfig:
     admin_fee: float = 0.003              # ADMIN_FEE (initial deposit to Administrative Fund)
     city_fee: float = 0.0                 # CITY_FEE (city development / PID fee)
     admin_fee_fixed_lot: float = 75.0     # ADMIN_FEE_FIXED_LOT ($/lot/yr)
+    admin_fee_fixed_series: float = 0.0   # ADMIN_FEE_FIXED_SERIES ($/series/yr, e.g. city admin)
     admin_escalator: float = 0.02         # ADMIN_ESCALATOR
     dp_reserve_deposit: float = 0.0075    # DP_RESERVE_DEPOSIT (Delinquency & Prepayment)
     reserve_method: str = "125% Average Annual DS"  # RESERVE_METHOD
@@ -104,6 +105,12 @@ class ModelConfig:
     months_lot_to_close: int = 6          # MONTHS_LOT_TO_CLOSE (lot delivery → first closing)
     av_lag_years: int = 1                 # AV_LAG_YEARS (closing year → tax roll year)
     projection_years: int = 40            # PROJECTION_YEARS
+
+    # Homeowner cost comparison (PID vs. no PID)
+    mortgage_rate: float = 0.0625         # MORTGAGE_RATE
+    mortgage_term: int = 30               # MORTGAGE_TERM
+    mortgage_ltv: float = 0.90            # MORTGAGE_LTV
+    home_price_multiple: float = 5.0      # HOME_PRICE_MULTIPLE (home price / lot price)
 
     # Developer information
     products: list[Product] = field(default_factory=list)

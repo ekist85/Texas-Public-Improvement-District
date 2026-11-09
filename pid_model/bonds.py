@@ -120,6 +120,12 @@ class BondModel:
         self.series: list[Series] = []
 
     # ── per-series build ─────────────────────────────────────────────────────
+    def _admin_shares(self, ph: Phase) -> dict[str, float]:
+        """Each lot's share of the per-series admin cost, by gross installment."""
+        tot = sum(n * self.cfg.product(p).avg_selling_price for p, n in ph.lots.items())
+        return {p: (self.cfg.product(p).avg_selling_price / tot if tot else 0.0)
+                for p in ph.lots}
+
     def _schedule_dates(self, s: Series) -> list[date]:
         cfg = self.cfg
         months = sorted({cfg.prin_maturity, cfg.int_maturity})
@@ -134,7 +140,8 @@ class BondModel:
     def _build_series(self, s: Series, scale: float) -> None:
         cfg = self.cfg
         s.lot_assessments = {
-            prod: size_lot(cfg, cfg.product(prod), s.first_prin_year, s.n_years, scale)
+            prod: size_lot(cfg, cfg.product(prod), s.first_prin_year, s.n_years, scale,
+                           self._admin_shares(s.phase)[prod])
             for prod, n in s.phase.lots.items() if n > 0}
 
         # Principal by bond year = sum of lot principal, rounded; final year plugs
@@ -214,10 +221,11 @@ class BondModel:
                        capi_end, first_prin, ph.bond_delivery.year + cfg.final_mat_yrs)
 
             # 1. Capacity
-            cap = 0.0
+            cap, shares = 0.0, self._admin_shares(ph)
             for prod, n in ph.lots.items():
                 if n > 0:
-                    cap += n * size_lot(cfg, cfg.product(prod), first_prin, s.n_years).capacity
+                    cap += n * size_lot(cfg, cfg.product(prod), first_prin, s.n_years,
+                                        series_share=shares[prod]).capacity
             s.capacity_par = cap
             limit, binding = int(cap // cfg.round_to) * cfg.round_to, "Assessment Capacity"
 
