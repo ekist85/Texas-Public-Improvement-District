@@ -14,6 +14,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
+import math
+
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
@@ -202,6 +204,42 @@ class BondModel:
         su.project_fund = par - (su.total_uses - su.project_fund)
         return su
 
+    def _non_project_pct(self, s: Series, shares: dict[str, float]) -> float:
+        """Uses other than the project fund, as a fraction of par, from the
+        unrounded unit schedule (par = 1)."""
+        cfg = self.cfg
+        ph = s.phase
+        cap = s.capacity_par
+        if cap <= 0:
+            return 1.0
+        rs, e = cfg.sizing_rate, cfg.admin_escalator
+        lots = {p: n for p, n in ph.lots.items() if n > 0}
+        ds, b = [], 1.0
+        for t in range(1, s.n_years + 1):
+            y = s.first_prin_year + t - 1
+            net = cfg.tax_collection / cfg.dsc_factor * sum(
+                n * (cfg.product(p).avg_selling_price / 100 * cfg.effective_pid_rate
+                     - (cfg.admin_fee_fixed_lot + cfg.admin_fee_fixed_series * shares[p]) * (1 + e) ** (t - 1))
+                for p, n in lots.items())
+            prin = b if t == s.n_years else net / cap - b * rs
+            frac = days360(max(s.delivery, date(y - 1, cfg.prin_maturity, 1)), date(y, cfg.prin_maturity, 1)) / 360
+            ds.append(prin + b * cfg.bond_rate * frac)
+            b -= prin
+        avg125, mads, ten = 1.25 * sum(ds) / len(ds), max(ds), 0.10
+        m = cfg.reserve_method.lower()
+        res = mads if m.startswith("max") else ten if m.startswith("10") else \
+            min(avg125, mads, ten) if m.startswith("lesser") else avg125
+        last_capi = self._last_capi_date(s)
+        capi = cfg.bond_rate * days360(s.delivery, last_capi) / 360 if last_capi > s.delivery else 0.0
+        return (res + capi + cfg.dp_reserve_deposit + cfg.admin_fee + cfg.city_fee
+                + cfg.uwd_fee + cfg.coi_fee)
+
+    def _last_capi_date(self, s: Series) -> date:
+        cfg = self.cfg
+        y = s.capi_end.year
+        cands = [date(yy, m, 1) for yy in (y, y - 1) for m in (cfg.prin_maturity, cfg.int_maturity)]
+        return max([s.delivery] + [d for d in cands if d <= s.capi_end])
+
     def _try_par(self, s: Series, par: float) -> SourcesUses:
         s.par = par
         scale = par / s.capacity_par if s.capacity_par else 0.0
@@ -235,23 +273,18 @@ class BondModel:
             if cfg.size_to_vtl.lower().startswith("y") and s.vtl_par < limit:
                 limit, binding = int(s.vtl_par // cfg.round_to) * cfg.round_to, "Value-to-Lien"
 
-            # 3. Cost need — smallest par whose project fund covers the costs
+            # 3. Cost need — every use except the project fund scales with par, so
+            #    par = costs / (1 - non-project uses as % of par), rounded up.
+            #    (Same closed form as the Excel model, so the two agree exactly.)
             if cfg.size_to_costs.lower().startswith("y") and ph.improvement_costs > 0:
-                lo, hi = 0, limit
-                if self._try_par(s, hi).project_fund >= ph.improvement_costs:
-                    while hi - lo > cfg.round_to:
-                        mid = (lo + hi) // 2 // cfg.round_to * cfg.round_to
-                        if mid in (lo, hi):
-                            break
-                        if self._try_par(s, mid).project_fund >= ph.improvement_costs:
-                            hi = mid
-                        else:
-                            lo = mid
-                    s.cost_par = hi
-                    if hi < limit:
-                        limit, binding = hi, "Improvement Costs"
+                u = self._non_project_pct(s, shares)
+                if u < 1:
+                    need = math.ceil(round(ph.improvement_costs / (1 - u) / cfg.round_to, 9)) * cfg.round_to
+                    s.cost_par = need
+                    if need < limit:
+                        limit, binding = need, "Improvement Costs"
                 else:
-                    s.cost_par = float("nan")    # capacity cannot fund full costs
+                    s.cost_par = float("nan")
 
             s.binding = binding
             s.su = self._try_par(s, limit)

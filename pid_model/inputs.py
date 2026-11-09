@@ -178,8 +178,8 @@ def _input_cell(ws, row: int, col: int, value, fmt: Optional[str]):
 
 
 # ── Template builder ─────────────────────────────────────────────────────────
-def build_inputs_template(path: str, cfg: Optional[ModelConfig] = None,
-                          comparables: Optional[list[dict]] = None) -> str:
+def build_inputs_template(path: Optional[str], cfg: Optional[ModelConfig] = None,
+                          comparables: Optional[list[dict]] = None, return_workbook: bool = False):
     cfg = cfg or sample_config()
     wb = openpyxl.Workbook()
 
@@ -351,6 +351,8 @@ def build_inputs_template(path: str, cfg: Optional[ModelConfig] = None,
                 c.number_format = FMT_DATE
     dc.freeze_panes = "C5"
 
+    if return_workbook:
+        return wb
     wb.save(path)
     return path
 

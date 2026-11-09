@@ -13,7 +13,11 @@ Reimbursement models.
   Copy it, rename it per project, and point the notebook (or `main.py`) at it.
 - **Jupyter notebook (`texas_pid_model_notebook.ipynb`)** — the working interface: set
   `INPUTS_PATH`, Run All, review the error-check banners and tables, and the last cell writes the Excel.
-- **Excel report** — output only; regenerate it whenever inputs change.
+- **Excel report** — output of the Python model; regenerate it whenever inputs change.
+- **Recalculating Excel model (`excel_model/Texas PID Model.xlsx`)** — a standalone version of the
+  whole model in live Excel formulas. Edit the yellow cells and every tab updates; no Python needed.
+  It uses the same input tabs and range names, so the Python model can read it too, and it
+  reconciles to the Python results to the cent (see below).
 
 ## Quick start
 
@@ -61,6 +65,26 @@ Validation:
   interest in year 3) with a 3.28x vs. 3.24x value-to-lien.
 - With the July 2026 memo assumptions ($500,000 ASP, $0.9117 rate, $75 admin at 2%,
 6.50% + 0.50%) the model's per-lot assessment is $55,424 — identical to the memo.
+
+## Recalculating Excel model
+
+`excel_model/Texas PID Model.xlsx` (rebuild with `python main.py --excel-model`):
+
+| Tab | Purpose |
+|---|---|
+| Inputs, Developer Information, Overlapping Taxes | the only cells to edit (yellow) — up to 8 lot types, 10 series |
+| Summary | memo table, results by series, model checks (OK / CHECK), key assumptions |
+| Sources and Uses · Bond Sizing Analysis · Assessment Roll | output tables across all series |
+| Annual Installments | per-lot schedule — pick a series (1–10) and lot type (1–8) |
+| Project and PID Rev Analysis · Tax Rate and VTL Tests · Homeowner Cost Comparison | as in the Python report |
+| Series 1 … Series 10 | each improvement area's full calculation: capacity, sizing, annual bond and installment schedule, reserve, CAPI, sources & uses |
+| Absorption | monthly lots-open and closings engine (40-year horizon) |
+
+Reconciliation: run on the same workbook, Python and Excel agree to the cent on par, every
+sources-and-uses line, per-lot assessments and installments, value at delivery, and every
+bond-year debt service — tested on the sample and on a three-series stress case (three lot types,
+fractional pace, 3% inflation, overlapping-cap rate, per-series admin, lesser-of-3 reserve,
+VTL cap binding, CAPI override, October delivery).
 
 ## Output (`output/<PID name> - PID Analysis.xlsx`)
 

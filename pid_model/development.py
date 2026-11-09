@@ -59,8 +59,9 @@ class DevelopmentProjection:
                         remaining[name] -= n
                         can_close -= n
                         carry -= n
-                # pace does not bank while no lots are available
-                carry = min(carry, prod.absorption_per_month)
+                # pace does not bank: pace left unused because no lots were open is dropped
+                if can_close > 0:
+                    carry = 0.0
                 m += relativedelta(months=1)
         return self
 

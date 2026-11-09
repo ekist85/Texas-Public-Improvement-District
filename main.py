@@ -6,6 +6,7 @@ Usage
     python main.py --inputs "path/to/inputs.xlsx"   # run on a specific inputs workbook
     python main.py --template                       # (re)write a blank-ish sample inputs workbook
     python main.py --sample                         # run on the built-in sample project
+    python main.py --excel-model                    # (re)build the recalculating Excel model
 
 Outputs (in --output, default 'output/')
     <PID name> PID Analysis.xlsx   multi-sheet Excel report
@@ -28,6 +29,7 @@ from pid_model.config import ModelConfig, sample_config   # noqa: E402
 from pid_model.development import DevelopmentProjection   # noqa: E402
 from pid_model.inputs import build_inputs_template, load_inputs  # noqa: E402
 from pid_model.report import build_excel_report           # noqa: E402
+from pid_model.excel_model import build_excel_model       # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_INPUTS = os.path.join(HERE, "inputs", "Texas PID Inputs.xlsx")
@@ -105,11 +107,20 @@ def main():
     ap.add_argument("--output", default=os.path.join(HERE, "output"), help="output folder")
     ap.add_argument("--template", action="store_true", help="write the sample inputs workbook and exit")
     ap.add_argument("--sample", action="store_true", help="run the built-in sample project")
+    ap.add_argument("--excel-model", action="store_true",
+                    help="build the standalone recalculating Excel model from --inputs (or the sample)")
     args = ap.parse_args()
 
     if args.template:
         os.makedirs(os.path.dirname(args.inputs), exist_ok=True)
         print("Wrote", build_inputs_template(args.inputs, sample_config(), load_comparables()))
+        return
+    if args.excel_model:
+        cfg = sample_config() if args.sample or not os.path.exists(args.inputs) else load_inputs(args.inputs)
+        out = os.path.join(HERE, "excel_model", "Texas PID Model.xlsx")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        print("Wrote", build_excel_model(out, cfg, load_comparables()),
+              "\n(open in Excel; formulas calculate on open)")
         return
     cfg = sample_config() if args.sample else load_inputs(args.inputs)
     run_model(cfg, args.output)
